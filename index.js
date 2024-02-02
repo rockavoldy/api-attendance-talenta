@@ -14,7 +14,7 @@ if (!ACCOUNT_EMAIL || !ACCOUNT_PASSWORD || !BOT_TOKEN) {
 }
 
 const checkUsername = async (username) => {
-  if (username === process.env.TG_USERNAME) {
+  if (process.env.TG_USERNAME && username === process.env.TG_USERNAME) {
     return true;
   }
 
