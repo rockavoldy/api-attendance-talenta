@@ -6,9 +6,6 @@ Welcome to the Attendance Talenta API! This API enables you Check-in/check-out f
 
 - [Features](#features)
 - [Getting Started](#getting-started)
-- [Endpoints](#endpoints)
-- [Request and Response Examples](#request-and-response-examples)
-- [Error Handling](#error-handling)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -21,64 +18,27 @@ Welcome to the Attendance Talenta API! This API enables you Check-in/check-out f
 1. **Clone the repository:**
 
    ```bash
-   git clone https://github.com/tedy69/api-attendance-talenta.git
+   git clone https://github.com/rockavoldy/api-attendance-talenta.git
    ```
 
 2. **Install dependencies:**
 
    ```bash
    cd api-attendance-talenta
-   npm install
+   bun install
    ```
 
 3. **Set up environment variables:**
 
-   Create a `.env` file based on `.env.example` and provide the required configuration values.
+   Create a `.env` file based on `example.env` and provide the required configuration values.
 
 4. **Start the server:**
 
    ```bash
-   npm start
+   bun start
    ```
 
-   The API will be available at `http://localhost:3000`.
-
-## Endpoints
-
-- `POST /`: Record employee check-in and check-out.
-
-## Request and Response Examples
-
-### Check-In (POST /)
-
-**Request:**
-
-```http
-POST /
-Content-Type: application/json
-
-{
-  "LOCATION_TYPE": "HOME",
-  "ACCOUNT_EMAIL": "gmail@tedyfazrin.com",
-  "ACCOUNT_PASSWORD": "**********",
-  "CHECK_TYPE": "CHECK_IN"
-}
-```
-
-**Response:**
-
-```json
-{
-  "status_code": 200,
-  "message": "Check-in successful",
-}
-```
-
-For more examples and details, refer to the [API Documentation](#link-to-documentation).
-
-## Error Handling
-
-In case of errors, the API responds with appropriate status codes and error messages. For a list of possible errors and their meanings, see [Error Handling](#link-to-error-handling).
+   Then it will listen for commands from the Bot
 
 ## Contributing
 
