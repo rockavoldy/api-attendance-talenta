@@ -1,225 +1,197 @@
-const express = require("express");
 const playwright = require("playwright-chromium");
-const dayjs = require("dayjs");
-const utc = require("dayjs/plugin/utc.js");
-const timezone = require("dayjs/plugin/timezone.js");
 const codec = require("string-codec");
 const FormData = require("form-data");
 const axios = require("axios");
-const cors = require("cors");
+const { Telegraf } = require("telegraf");
 require("dotenv").config();
 
-dayjs.extend(utc);
-dayjs.extend(timezone);
+const ACCOUNT_EMAIL = process.env.ACCOUNT_EMAIL;
+const ACCOUNT_PASSWORD = process.env.ACCOUNT_PASSWORD;
+const BOT_TOKEN = process.env.TG_TOKEN;
+if (!ACCOUNT_EMAIL || !ACCOUNT_PASSWORD || !BOT_TOKEN) {
+  console.error("Email, Password, or Bot token is missing!");
+  return;
+}
 
-const app = express();
-const port = process.env.PORT || 3000;
+const checkUsername = async (username) => {
+  if (username === process.env.TG_USERNAME) {
+    return true;
+  }
 
-app.use(express.json());
-app.use(cors({ origin: true, credentials: true }));
+  return false;
+};
 
-app.post("/", async (req, res) => {
-	try {
-		const {
-			ACCOUNT_EMAIL,
-			ACCOUNT_PASSWORD,
-			CHECK_TYPE,
-		} = req.body;
+const main = async (tgToken, accountEmail, accountPassword) => {
+  const bot = new Telegraf(tgToken);
+  bot.command("start", (ctx) => {
+    ctx.reply("Hello world!");
+  });
 
-		await main(
-			ACCOUNT_EMAIL,
-			ACCOUNT_PASSWORD,
-			CHECK_TYPE
-		);
+  bot.command("clockin", async (ctx) => {
+    if (!(await checkUsername(ctx.from.username))) {
+      console.log("Not authorized");
+      ctx.reply("Not authorized!");
+      throw "Not authorized!";
+    }
+    // when it's authorized, the username that sent the message is good
+    await talentaApi(accountEmail, accountPassword, "CHECK_IN");
+    return "success";
+  });
 
-		// Return success message with status code 200 with json format
-		res
-			.status(200)
-			.json({ status_code: 200, message: "Success " + CHECK_TYPE });
-	} catch (error) {
-		console.error(error);
-		// Return error message with status code 500 with json format
-		res.status(500).json({ status_code: 500, message: error.message });
-	}
-});
+  bot.command("clockout", async (ctx) => {
+    if (!(await checkUsername(ctx.from.username))) {
+      console.log("Not authorized");
+      ctx.reply("Not authorized!");
+      throw "Not authorized!";
+    }
+    // when it's authorized, the username that sent the message is good
+    await talentaApi(accountEmail, accountPassword, "CHECK_OUT");
+    return "success";
+  });
 
-const PUBLIC_HOLIDAYS = [
-	"23 Jan 2023", // cuti bersama imlek
-	"23 Mar 2023", // nyepi
-	"23 Mar 2023", // cuti bersama nyepi
-	"7 Apr 2023", // wafat isa almasih
-	"21 Apr 2023", // idul fitri
-	"24 Apr 2023", // idul fitri
-	"25 Apr 2023", // idul fitri
-	"26 Apr 2023", // idul fitri
-	"1 Mei 2023", // hari buruh
-	"18 Mei 2023", // kenaikan isa almasih
-	"1 Jun 2023", // hari lahir pancasila
-	"2 Jun 2023", // cuti bersama waisak
-	"29 Jun 2023", // idul adha
-	"19 Jul 2023", // tahun baru islam
-	"17 Aug 2023", // kemerdekaan indonesia
-	"28 Sep 2023", // maulid nabi muhammad
-	"25 Dec 2023", // natal
-	"26 Dec 2023", // cuti bersama natal
-	"1 Jan 2024", // tahun baru
-	"8 Feb 2024", // imlek
-	"9 Feb 2024", // cuti bersama imlek
-	"11 Mar 2024", // nyepi
-	"12 Mar 2024", // cuti bersama nyepi
-	"29 Mar 2024", // wafat isa almasih
-	"8 Apr 2024", // cuti bersama idul fitri
-	"9 Apr 2024", // cuti bersama idul fitri
-	"10 Apr 2024", // idul fitri
-	"11 Apr 2024", // idul fitri
-	"12 Apr 2024", // cuti bersama idul fitri
-	"1 May 2024", // hari buruh
-	"9 May 2024", // kenaikan isa almasih
-];
+  bot.launch();
 
-const main = async (
-	accountEmail,
-	accountPassword,
-	checkType
-) => {
-	let geoLatitude = "";
-	let geoLongitude = "";
+  // Graceful shutdown
+  process.once("SIGINT", () => bot.stop("SIGINT"));
+  process.once("SIGTERM", () => bot.stop("SIGTERM"));
+};
 
-	const isHeadless = process.env.HEADLESS_BROWSER === "true";
+const talentaApi = async (accountEmail, accountPassword, checkType) => {
+  let geoLatitude = "";
+  let geoLongitude = "";
 
-	const TODAY = dayjs().tz("Asia/Jakarta").format("D MMM YYYY");
+  const isHeadless = process.env.HEADLESS_BROWSER === "true";
 
-	if (PUBLIC_HOLIDAYS.includes(TODAY)) {
-		console.log("Today is a public holiday, skipping check in/out...");
-		return;
-	}
+  const browser = await playwright["chromium"].launch({
+    headless: isHeadless,
+  });
 
-	const browser = await playwright["chromium"].launch({
-		headless: isHeadless,
-    });
-    
-	geoLatitude = process.env.GEO_LATITUDE;
-	geoLongitude = process.env.GEO_LONGITUDE;
+  geoLatitude = process.env.GEO_LATITUDE;
+  geoLongitude = process.env.GEO_LONGITUDE;
 
-	const context = await browser.newContext({
-		viewport: { width: 1080, height: 560 },
-		geolocation: {
-			latitude: Number(geoLatitude),
-			longitude: Number(geoLongitude),
-		},
-		permissions: ["geolocation"],
-	});
+  const context = await browser.newContext({
+    viewport: { width: 1080, height: 560 },
+    geolocation: {
+      latitude: Number(geoLatitude),
+      longitude: Number(geoLongitude),
+    },
+    permissions: ["geolocation"],
+  });
 
-	const page = await context.newPage();
+  const page = await context.newPage();
 
-	console.log("Opening login page...");
-	await page.goto(
-		"https://account.mekari.com/users/sign_in?client_id=TAL-73645&return_to=L2F1dGg_Y2xpZW50X2lkPVRBTC03MzY0NSZyZXNwb25zZV90eXBlPWNvZGUmc2NvcGU9c3NvOnByb2ZpbGU%3D"
-	);
+  console.log("Opening login page...");
+  await page.goto(
+    "https://account.mekari.com/users/sign_in?client_id=TAL-73645&return_to=L2F1dGg_Y2xpZW50X2lkPVRBTC03MzY0NSZyZXNwb25zZV90eXBlPWNvZGUmc2NvcGU9c3NvOnByb2ZpbGU%3D"
+  );
 
-	await page.setViewportSize({ width: 1080, height: 560 });
+  await page.setViewportSize({ width: 1080, height: 560 });
 
-	console.log("Filling in account email & password...");
-	await page.click("#user_email");
-	await page.fill("#user_email", accountEmail);
+  console.log("Filling in account email & password...");
+  await page.click("#user_email");
+  await page.fill("#user_email", accountEmail);
 
-	await page.press("#user_email", "Tab");
-	await page.fill("#user_password", accountPassword); // Updated code
+  await page.press("#user_email", "Tab");
+  await page.fill("#user_password", accountPassword); // Updated code
 
-	console.log("Signing in...");
-	await Promise.all([
-		page.click("#new-signin-button"),
-		page.waitForNavigation(),
-	]);
+  console.log("Signing in...");
+  await Promise.all([
+    page.click("#new-signin-button"),
+    page.waitForURL("**/employee/dashboard"),
+  ]);
 
-	const dashboardNav = page.getByText("Dashboard");
-	if ((await dashboardNav.innerText()) === "Dashboard") {
-		console.log("Successfully Logged in...");
-	}
+  const dashboardNav = page.getByText("Dashboard");
+  if ((await dashboardNav.innerText()) === "Dashboard") {
+    console.log("Successfully Logged in...");
+  }
 
-	const myName = (await page.locator("#navbar-name").textContent()).trim();
-	const whoIsOffToday = await page
-		.locator(".tl-card-small", { hasText: `Who's Off` })
-		.innerText();
+  const myName = (await page.locator("#navbar-name").textContent()).trim();
+  const whoIsOffToday = await page
+    .locator(".tl-card-small", { hasText: `Who's Off` })
+    .innerText();
 
-	const isOffToday = whoIsOffToday.includes(myName);
+  const isOffToday = whoIsOffToday.includes(myName);
 
-	if (isOffToday) {
-		console.log("You are off today, skipping check in/out...");
-		await browser.close();
-		return;
-	}
+  if (isOffToday) {
+    console.log("You are off today, skipping check in/out...");
+    await browser.close();
+    return;
+  }
 
-	if (process.env.SKIP_CHECK_IN_OUT === "true") {
-		console.log("Skipping Check In/Out...");
-		await browser.close();
-		return;
-	}
+  if (process.env.SKIP_CHECK_IN_OUT === "true") {
+    console.log("Skipping Check In/Out...");
+    await browser.close();
+    return;
+  }
 
-	const cookies = await context.cookies();
+  const cookies = await context.cookies();
 
-	let obj = cookies.find((o) => o.name === "PHPSESSID");
+  let obj = cookies.find((o) => o.name === "PHPSESSID");
 
-	if (obj === undefined) {
-		console.log("Can't find PHPSESSID Cookies");
-		await browser.close();
-		return;
-	}
+  if (obj === undefined) {
+    console.log("Can't find PHPSESSID Cookies");
+    await browser.close();
+    return;
+  }
 
-	let desc = "";
-	const isCheckOut = checkType === "CHECK_OUT";
+  let desc = "";
+  const isCheckOut = checkType === "CHECK_OUT";
 
-	const config = prepForm({
-		long: geoLongitude,
-		lat: geoLatitude,
-		desc: desc,
-		cookies: "PHPSESSID=" + obj.value,
-		isCheckOut: isCheckOut,
-	});
+  const config = prepForm({
+    long: geoLongitude,
+    lat: geoLatitude,
+    desc: desc,
+    cookies: "PHPSESSID=" + obj.value,
+    isCheckOut: isCheckOut,
+  });
 
-	const data = await attendancePost(config);
+  const data = await attendancePost(config);
 
-	console.log("Success " + checkType);
+  console.log("Success " + checkType);
 
-	await browser.close();
+  await browser.close();
 
-	return data;
+  return data;
 };
 
 const prepForm = (obj) => {
-	const { long, lat, desc, cookies, isCheckOut = false } = obj;
-	const data = new FormData();
-	const status = isCheckOut ? "checkout" : "checkin";
+  const { long, lat, desc, cookies, isCheckOut = false } = obj;
+  const data = new FormData();
+  const status = isCheckOut ? "checkout" : "checkin";
 
-	const longEncoded = codec.encoder(codec.encoder(long, "base64"), "rot13");
-	const latEncoded = codec.encoder(codec.encoder(lat, "base64"), "rot13");
+  const longEncoded = codec.encoder(codec.encoder(long, "base64"), "rot13");
+  const latEncoded = codec.encoder(codec.encoder(lat, "base64"), "rot13");
 
-	data.append("longitude", longEncoded);
-	data.append("latitude", latEncoded);
-	data.append("status", status);
-	data.append("description", desc);
+  data.append("longitude", longEncoded);
+  data.append("latitude", latEncoded);
+  data.append("status", status);
+  data.append("description", desc);
 
-	const config = {
-		method: "post",
-		url: "https://hr.talenta.co/api/web/live-attendance/request",
-		headers: {
-			Cookie: cookies,
-			...data.getHeaders(),
-		},
-		data: data,
-	};
+  const config = {
+    method: "post",
+    url: "https://hr.talenta.co/api/web/live-attendance/request",
+    headers: {
+      Cookie: cookies,
+      ...data.getHeaders(),
+    },
+    data: data,
+  };
 
-	return config;
+  return config;
 };
 
 const attendancePost = async (config) => {
-	const resp = await axios(config);
+  const resp = await axios(config);
 
-	console.log(resp.data);
+  console.log(resp.data);
 
-	return resp.data;
+  return resp.data;
 };
 
-app.listen(port, () => {
-	console.log(`Server is running on http://localhost:${port}`);
-});
+try {
+  main(BOT_TOKEN, ACCOUNT_EMAIL, ACCOUNT_PASSWORD);
+  // await talentaApi(ACCOUNT_EMAIL, ACCOUNT_PASSWORD, CHECK_TYPE);
+} catch (err) {
+  console.error(err);
+  return err;
+}
