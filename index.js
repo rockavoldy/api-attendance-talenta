@@ -34,7 +34,10 @@ const main = async (tgToken, accountEmail, accountPassword) => {
       throw "Not authorized!";
     }
     // when it's authorized, the username that sent the message is good
-    await talentaApi(accountEmail, accountPassword, "CHECK_IN");
+    const resp = await talentaApi(accountEmail, accountPassword, "CHECK_IN");
+    ctx.reply(resp.message);
+    console.log(resp.message);
+
     return "success";
   });
 
@@ -45,7 +48,10 @@ const main = async (tgToken, accountEmail, accountPassword) => {
       throw "Not authorized!";
     }
     // when it's authorized, the username that sent the message is good
-    await talentaApi(accountEmail, accountPassword, "CHECK_OUT");
+    const resp = await talentaApi(accountEmail, accountPassword, "CHECK_OUT");
+    ctx.reply(resp.message);
+    console.log(resp.message);
+
     return "success";
   });
 
@@ -147,7 +153,7 @@ const talentaApi = async (accountEmail, accountPassword, checkType) => {
 
   const data = await attendancePost(config);
 
-  console.log("Success " + checkType);
+  // console.log("Success " + checkType);
 
   await browser.close();
 
@@ -183,7 +189,7 @@ const prepForm = (obj) => {
 const attendancePost = async (config) => {
   const resp = await axios(config);
 
-  console.log(resp.data);
+  // console.log(resp.data);
 
   return resp.data;
 };
